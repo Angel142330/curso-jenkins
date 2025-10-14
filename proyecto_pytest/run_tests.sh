@@ -1,5 +1,11 @@
 #!/bin/bash
 
+# Eliminar venv existente si no es compatible (por ejemplo, creado en Windows)
+if [ -d "venv" ] && [ ! -f "venv/bin/activate" ]; then
+    echo "Eliminando entorno virtual incompatible"
+    rm -rf venv
+fi
+
 # Crear entorno virtual si no existe
 if [ ! -d "venv" ]; then
     echo "Creando entorno virtual"
@@ -19,6 +25,7 @@ fi
 
 # Verificar que el entorno virtual está activado
 echo "Python utilizado: $(which python3)"
+echo "Pip utilizado: $(which pip)"
 
 # Crear directorio de reportes si no existe
 mkdir -p reports

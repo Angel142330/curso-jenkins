@@ -1,0 +1,11 @@
+# Entorno virtual
+venv/
+
+# Reportes de pytest
+reports/
+
+# Archivos de Python
+__pycache__/
+*.py[cod]
+*$py.class
+

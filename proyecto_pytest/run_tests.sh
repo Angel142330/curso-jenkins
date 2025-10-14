@@ -4,9 +4,6 @@ if [! -d "venv" ]; then
     echo "Creando entorno virtual"
     python3 -m venv venv
 fi
-else
-    echo "Entorno virtual ya existe"
-fi
 
 #Activar el entorno virtual correctamente
 if [ -f "venv/bin/activate" ]; then

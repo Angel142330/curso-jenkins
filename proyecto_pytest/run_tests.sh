@@ -1,10 +1,21 @@
 #!/bin/bash
 
-if [ -d "venv" ]; then
+if [! -d "venv" ]; then
+    echo "Creando entorno virtual"
     python3 -m venv venv
 fi
-source venv/bin/activate
+else
+    echo "Entorno virtual ya existe"
+fi
 
+#Activar el entorno virtual correctamente
+if [ -f "venv/bin/activate" ]; then
+    source venv/bin/activate
+elif [ -f "venv/Scripts/activate" ]; then
+    source venv/Scripts/activate
+fi
+
+source venv/bin/activate
 echo "Activando entorno virtual"
 
 pip install -r requirements.txt

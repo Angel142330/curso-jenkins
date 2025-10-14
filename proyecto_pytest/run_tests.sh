@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if [! -d "venv" ]; then
+if [ ! -d "venv" ]; then
     echo "Creando entorno virtual"
     python3 -m venv venv
 fi

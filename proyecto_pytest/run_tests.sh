@@ -1,7 +1,7 @@
 #!/bin/bash
 
 
-source venv/Scripts/activate
+source venv/bin/activate
 
 echo "Activando entorno virtual"
 

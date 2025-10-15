@@ -36,6 +36,6 @@ pip install -r requirements.txt
 
 # Ejecutar pruebas
 echo "Ejecutando pruebas de suma"
-pytest test/ --junitxml=reports/test-results.xml --html=reports/test-results.html --self-contained-html
+venv/bin/python -m pytest test/ --junitxml=reports/test-results.xml --html=reports/test-results.html --self-contained-html
 
 echo "Pruebas finalizadas"

@@ -1,9 +1,5 @@
-// Cargar la Shared Library desde jenkins-shared-library/ en el mismo repositorio
-library identifier: 'jenkins-shared-library@develop', 
-        retriever: modernSCM([
-            $class: 'GitSCMSource',
-            remote: 'https://github.com/Angel142330/curso-jenkins.git'
-        ])
+// Cargar la Shared Library desde la configuración global de Jenkins
+@Library('jenkins-shared-library@develop') _
 
 pipeline {
     agent any 

@@ -1,38 +1,51 @@
+// Cargar la Shared Library desde jenkins-shared-library/ en el mismo repositorio
+library identifier: 'jenkins-shared-library@develop', 
+        retriever: modernSCM([
+            $class: 'GitSCMSource',
+            remote: 'https://github.com/Angel142330/curso-jenkins.git'
+        ])
+
 pipeline {
     agent any 
-    stages{
-        stage('Build'){
-            steps{
-                dir('mi-proyecto') {
-                    sh 'mvn clean install'
-                }
+    
+    stages {
+        stage('Build') {
+            steps {
+                // Usando la función buildMaven de la shared library
+                buildMaven('mi-proyecto')
             }
         }
-        stage('Test'){
-            steps{
-                dir('mi-proyecto') {
-                    sh 'mvn test'
-                }
+        
+        stage('Test') {
+            steps {
+                // Usando la función testMaven de la shared library
+                testMaven('mi-proyecto')
             }
         }
-        stage('Deploy'){
-            steps{
-                echo 'Simulando despliegue en el servidor de producción'
+        
+        stage('Deploy') {
+            steps {
+                // Usando la función deployApp de la shared library
+                deployApp(
+                    appName: 'mi-proyecto',
+                    environment: 'development',
+                    deployCommand: 'echo "Simulando despliegue en el servidor de producción"'
+                )
             }
         }
     }
 
-    post{
-        always{
-            echo 'Always'
+    post {
+        always {
+            echo 'Pipeline finalizado'
         }
-        success{
-            echo 'Este es el success'
+        success {
+            // Usando la función notifySlack de la shared library
+            notifySlack('Build completado exitosamente!', 'SUCCESS')
         }
-        failure{
-            echo 'Este es el failure'
+        failure {
+            // Usando la función notifySlack de la shared library
+            notifySlack('Build falló', 'FAILURE')
         }
-        
     }
-    
 }

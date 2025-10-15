@@ -1,10 +1,41 @@
 // Cargar la Shared Library desde la raíz del repositorio
 @Library('jenkins-shared-library@develop') _
+import org.miempresa.Utils  // ← Importar la clase Utils
+
+def utils = new Utils(this)  // ← Crear instancia de Utils
 
 pipeline {
     agent any 
     
+    environment {
+        BUILD_VERSION = ''      // Se llenará con Utils
+        BUILD_TIMESTAMP = ''    // Se llenará con Utils
+        IS_RELEASE_BRANCH = ''  // Se llenará con Utils
+    }
+    
     stages {
+        stage('Prepare - Info Build') {
+            steps {
+                script {
+                    // ✨ USANDO UTILS para obtener información
+                    BUILD_TIMESTAMP = utils.getTimestamp('yyyyMMdd-HHmmss')
+                    BUILD_VERSION = utils.getTimestamp('yyyyMMdd')
+                    IS_RELEASE_BRANCH = utils.isReleaseBranch(env.BRANCH_NAME ?: 'develop')
+                    
+                    echo "════════════════════════════════════════"
+                    echo "📋 INFORMACIÓN DEL BUILD"
+                    echo "════════════════════════════════════════"
+                    echo "🏷️  Build Version: ${BUILD_VERSION}"
+                    echo "⏰  Build Timestamp: ${BUILD_TIMESTAMP}"
+                    echo "🌿  Rama: ${env.BRANCH_NAME ?: 'develop'}"
+                    echo "📦  Release Branch: ${IS_RELEASE_BRANCH}"
+                    echo "🔢  Build Number: ${env.BUILD_NUMBER}"
+                    echo "👤  Started by: ${env.BUILD_USER_ID ?: 'Jenkins'}"
+                    echo "════════════════════════════════════════"
+                }
+            }
+        }
+        
         stage('Build') {
             steps {
                 // Usando buildMaven de vars/buildMaven.groovy
@@ -21,27 +52,47 @@ pipeline {
         
         stage('Deploy') {
             steps {
-                // Usando deployApp de vars/deployApp.groovy
-                deployApp(
-                    appName: 'mi-proyecto',
-                    environment: 'development',
-                    deployCommand: 'echo "Simulando despliegue en el servidor de producción"'
-                )
+                script {
+                    // Determinar entorno según el tipo de rama (usando Utils)
+                    def environment = IS_RELEASE_BRANCH ? 'staging' : 'development'
+                    
+                    echo "🎯 Desplegando a: ${environment} (Branch: ${IS_RELEASE_BRANCH})"
+                    
+                    // Usando deployApp de vars/deployApp.groovy
+                    deployApp(
+                        appName: "mi-proyecto-${BUILD_VERSION}",  // ← Usando versión de Utils
+                        environment: environment,
+                        deployCommand: "echo 'Desplegando versión ${BUILD_TIMESTAMP} a ${environment}'"
+                    )
+                }
             }
         }
     }
 
     post {
         always {
-            echo 'Pipeline finalizado'
+            script {
+                echo '════════════════════════════════════════'
+                echo '📊 RESUMEN DEL BUILD'
+                echo '════════════════════════════════════════'
+                echo "Version: ${BUILD_VERSION}"
+                echo "Timestamp: ${BUILD_TIMESTAMP}"
+                echo "Status: ${currentBuild.currentResult}"
+                echo 'Pipeline finalizado'
+                echo '════════════════════════════════════════'
+            }
         }
         success {
-            // Usando notifySlack de vars/notifySlack.groovy
-            notifySlack('Build completado exitosamente!', 'SUCCESS')
+            script {
+                // Usando notifySlack con información de Utils
+                notifySlack("Build ${BUILD_VERSION} completado exitosamente! 🎉", 'SUCCESS')
+            }
         }
         failure {
-            // Usando notifySlack de vars/notifySlack.groovy
-            notifySlack('Build falló', 'FAILURE')
+            script {
+                // Usando notifySlack con información de Utils
+                notifySlack("Build ${BUILD_VERSION} falló en ${env.STAGE_NAME} ❌", 'FAILURE')
+            }
         }
     }
 }

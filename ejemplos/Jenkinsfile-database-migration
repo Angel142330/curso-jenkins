@@ -1,0 +1,178 @@
+// Ejemplo: Migración y actualización de base de datos
+@Library('jenkins-shared-library@develop') _
+import org.miempresa.DatabaseHelper
+
+def dbHelper = new DatabaseHelper(this)
+
+pipeline {
+    agent any
+    
+    parameters {
+        choice(
+            name: 'MIGRATION_TYPE',
+            choices: ['schema_update', 'data_migration', 'rollback'],
+            description: 'Tipo de migración'
+        )
+        booleanParam(
+            name: 'DRY_RUN',
+            defaultValue: true,
+            description: 'Ejecutar en modo dry-run (sin commits)'
+        )
+    }
+    
+    environment {
+        DB_PASSWORD = credentials('postgres-password')
+    }
+    
+    stages {
+        stage('Pre-Migration Backup') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "💾 Haciendo backup pre-migración..."
+                    
+                    sqlBackup(
+                        driver: 'org.postgresql.Driver',
+                        url: 'jdbc:postgresql://localhost:5432/myapp',
+                        user: 'admin',
+                        password: env.DB_PASSWORD,
+                        table: 'users',
+                        backupFile: 'pre_migration_users.csv'
+                    )
+                }
+            }
+        }
+        
+        stage('Execute Migration') {
+            steps {
+                script {
+                    def commands = []
+                    
+                    switch(params.MIGRATION_TYPE) {
+                        case 'schema_update':
+                            commands = [
+                                "ALTER TABLE users ADD COLUMN last_login TIMESTAMP",
+                                "ALTER TABLE users ADD COLUMN login_count INTEGER DEFAULT 0",
+                                "CREATE INDEX idx_users_last_login ON users(last_login)"
+                            ]
+                            break
+                            
+                        case 'data_migration':
+                            commands = [
+                                "UPDATE users SET status = 'active' WHERE status IS NULL",
+                                "UPDATE orders SET processed_at = created_at WHERE processed_at IS NULL",
+                                "DELETE FROM sessions WHERE created_at < NOW() - INTERVAL '30 days'"
+                            ]
+                            break
+                            
+                        case 'rollback':
+                            commands = [
+                                "ALTER TABLE users DROP COLUMN last_login",
+                                "ALTER TABLE users DROP COLUMN login_count",
+                                "DROP INDEX IF EXISTS idx_users_last_login"
+                            ]
+                            break
+                    }
+                    
+                    if (params.DRY_RUN) {
+                        echo "🔍 DRY RUN - Comandos que se ejecutarían:"
+                        commands.each { cmd ->
+                            echo "  → ${cmd}"
+                        }
+                    } else {
+                        echo "⚙️ Ejecutando migración: ${params.MIGRATION_TYPE}"
+                        
+                        // Ejecutar en transacción
+                        sqlExecute(
+                            driver: 'org.postgresql.Driver',
+                            url: 'jdbc:postgresql://localhost:5432/myapp',
+                            user: 'admin',
+                            password: env.DB_PASSWORD,
+                            command: commands,
+                            transaction: true
+                        )
+                        
+                        echo "✅ Migración completada"
+                    }
+                }
+            }
+        }
+        
+        stage('Verify Migration') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    echo "🔎 Verificando migración..."
+                    
+                    def results = sqlQuery(
+                        driver: 'org.postgresql.Driver',
+                        url: 'jdbc:postgresql://localhost:5432/myapp',
+                        user: 'admin',
+                        password: env.DB_PASSWORD,
+                        query: """
+                            SELECT 
+                                table_name, 
+                                column_name, 
+                                data_type 
+                            FROM information_schema.columns 
+                            WHERE table_name = 'users'
+                            ORDER BY ordinal_position
+                        """
+                    )
+                    
+                    echo "📋 Estructura actual de tabla 'users':"
+                    results.each { col ->
+                        echo "  ${col.column_name}: ${col.data_type}"
+                    }
+                }
+            }
+        }
+        
+        stage('Log Migration') {
+            when {
+                expression { !params.DRY_RUN }
+            }
+            steps {
+                script {
+                    // Registrar la migración en tabla de log
+                    sqlExecute(
+                        driver: 'org.postgresql.Driver',
+                        url: 'jdbc:postgresql://localhost:5432/myapp',
+                        user: 'admin',
+                        password: env.DB_PASSWORD,
+                        command: """
+                            INSERT INTO migration_log 
+                            (migration_type, executed_by, executed_at, build_number) 
+                            VALUES 
+                            ('${params.MIGRATION_TYPE}', 'jenkins', NOW(), ${env.BUILD_NUMBER})
+                        """
+                    )
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            script {
+                def mode = params.DRY_RUN ? 'DRY RUN' : 'REAL'
+                notifySlack("Migración ${params.MIGRATION_TYPE} (${mode}) exitosa", 'SUCCESS')
+            }
+        }
+        failure {
+            script {
+                notifySlack("Error en migración ${params.MIGRATION_TYPE}", 'FAILURE')
+                
+                if (!params.DRY_RUN) {
+                    echo "⚠️ ROLLBACK AUTOMÁTICO REQUERIDO"
+                    echo "Restaurar desde backup: pre_migration_users.csv"
+                }
+            }
+        }
+    }
+}
+

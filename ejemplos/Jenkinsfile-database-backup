@@ -1,0 +1,117 @@
+// Ejemplo: Backup automático de base de datos
+@Library('jenkins-shared-library@develop') _
+import org.miempresa.Utils
+import org.miempresa.DatabaseHelper
+
+def utils = new Utils(this)
+def dbHelper = new DatabaseHelper(this)
+
+pipeline {
+    agent any
+    
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'staging', 'production'],
+            description: 'Entorno a respaldar'
+        )
+        string(
+            name: 'TABLES',
+            defaultValue: 'users,orders,products',
+            description: 'Tablas a respaldar (separadas por coma)'
+        )
+    }
+    
+    environment {
+        BACKUP_TIMESTAMP = ''
+        DB_CONFIG = ''
+    }
+    
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    // Generar timestamp para el backup
+                    BACKUP_TIMESTAMP = utils.getTimestamp('yyyyMMdd-HHmmss')
+                    
+                    // Cargar configuración de BD
+                    DB_CONFIG = dbHelper.getDbConfig('resources/db-config.json', params.ENVIRONMENT)
+                    
+                    echo "📋 Backup de ${params.ENVIRONMENT}"
+                    echo "⏰ Timestamp: ${BACKUP_TIMESTAMP}"
+                    echo "📊 Tablas: ${params.TABLES}"
+                }
+            }
+        }
+        
+        stage('Backup Tables') {
+            steps {
+                script {
+                    def tables = params.TABLES.split(',')
+                    
+                    tables.each { table ->
+                        def backupFile = "backups/${params.ENVIRONMENT}_${table}_${BACKUP_TIMESTAMP}.csv"
+                        
+                        echo "💾 Respaldando tabla: ${table}"
+                        
+                        sqlBackup(
+                            driver: DB_CONFIG.driver,
+                            url: DB_CONFIG.url,
+                            user: DB_CONFIG.user,
+                            password: DB_CONFIG.password,
+                            table: table.trim(),
+                            backupFile: backupFile
+                        )
+                    }
+                }
+            }
+        }
+        
+        stage('Compress Backups') {
+            steps {
+                script {
+                    def archiveName = "backup_${params.ENVIRONMENT}_${BACKUP_TIMESTAMP}.tar.gz"
+                    
+                    sh """
+                        tar -czf ${archiveName} backups/*.csv
+                        echo "📦 Archivo comprimido: ${archiveName}"
+                    """
+                    
+                    // Archivar en Jenkins
+                    archiveArtifacts artifacts: archiveName, fingerprint: true
+                }
+            }
+        }
+        
+        stage('Upload to S3') {
+            when {
+                expression { params.ENVIRONMENT == 'production' }
+            }
+            steps {
+                script {
+                    // Ejemplo: subir a S3 (requiere AWS CLI configurado)
+                    sh """
+                        aws s3 cp backup_${params.ENVIRONMENT}_${BACKUP_TIMESTAMP}.tar.gz \\
+                            s3://my-backups-bucket/database/${params.ENVIRONMENT}/
+                    """
+                    
+                    echo "☁️ Backup subido a S3"
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            notifySlack("Backup ${params.ENVIRONMENT} completado: ${BACKUP_TIMESTAMP}", 'SUCCESS')
+        }
+        failure {
+            notifySlack("Error en backup ${params.ENVIRONMENT}", 'FAILURE')
+        }
+        cleanup {
+            // Limpiar archivos temporales
+            sh 'rm -f backups/*.csv'
+        }
+    }
+}
+

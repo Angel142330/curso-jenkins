@@ -1,0 +1,35 @@
+{
+  "databases": {
+    "dev": {
+      "driver": "org.postgresql.Driver",
+      "url": "jdbc:postgresql://localhost:5432/myapp_dev",
+      "user": "dev_user",
+      "password": "dev_password"
+    },
+    "staging": {
+      "driver": "org.postgresql.Driver",
+      "url": "jdbc:postgresql://staging-db:5432/myapp_staging",
+      "user": "staging_user",
+      "password": "${STAGING_DB_PASSWORD}"
+    },
+    "production": {
+      "driver": "org.postgresql.Driver",
+      "url": "jdbc:postgresql://prod-db:5432/myapp_production",
+      "user": "prod_user",
+      "password": "${PROD_DB_PASSWORD}"
+    },
+    "mysql_example": {
+      "driver": "com.mysql.cj.jdbc.Driver",
+      "url": "jdbc:mysql://localhost:3306/mydb",
+      "user": "root",
+      "password": "password"
+    },
+    "sqlserver_example": {
+      "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+      "url": "jdbc:sqlserver://localhost:1433;databaseName=mydb",
+      "user": "sa",
+      "password": "password"
+    }
+  }
+}
+

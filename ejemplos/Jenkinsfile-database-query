@@ -1,0 +1,90 @@
+// Ejemplo: Consultar base de datos y exportar resultados
+@Library('jenkins-shared-library@develop') _
+import org.miempresa.DatabaseHelper
+
+def dbHelper = new DatabaseHelper(this)
+
+pipeline {
+    agent any
+    
+    environment {
+        DB_PASSWORD = credentials('postgres-password')  // Credencial de Jenkins
+    }
+    
+    stages {
+        stage('Query Database') {
+            steps {
+                script {
+                    // Ejemplo 1: Query simple con exportación a CSV
+                    def results = sqlQuery(
+                        driver: 'org.postgresql.Driver',
+                        url: 'jdbc:postgresql://localhost:5432/myapp',
+                        user: 'admin',
+                        password: env.DB_PASSWORD,
+                        query: 'SELECT id, name, email FROM users WHERE active = true',
+                        exportTo: 'active_users.csv'
+                    )
+                    
+                    echo "Total usuarios activos: ${results.size()}"
+                    
+                    // Mostrar primeros 5 resultados
+                    results.take(5).each { user ->
+                        echo "Usuario: ${user.name} (${user.email})"
+                    }
+                }
+            }
+        }
+        
+        stage('Complex Query') {
+            steps {
+                script {
+                    // Ejemplo 2: Query compleja con JOIN
+                    def query = '''
+                        SELECT 
+                            u.id,
+                            u.name,
+                            COUNT(o.id) as total_orders,
+                            SUM(o.amount) as total_amount
+                        FROM users u
+                        LEFT JOIN orders o ON u.id = o.user_id
+                        WHERE u.created_at >= CURRENT_DATE - INTERVAL '30 days'
+                        GROUP BY u.id, u.name
+                        ORDER BY total_amount DESC
+                        LIMIT 10
+                    '''
+                    
+                    def topUsers = sqlQuery(
+                        driver: 'org.postgresql.Driver',
+                        url: 'jdbc:postgresql://localhost:5432/myapp',
+                        user: 'admin',
+                        password: env.DB_PASSWORD,
+                        query: query,
+                        exportTo: 'top_users_last_30_days.csv'
+                    )
+                    
+                    echo "📊 Top 10 usuarios del último mes:"
+                    topUsers.each { user ->
+                        echo "${user.name}: ${user.total_orders} órdenes, \$${user.total_amount}"
+                    }
+                }
+            }
+        }
+        
+        stage('Archive Results') {
+            steps {
+                // Archivar archivos CSV generados
+                archiveArtifacts artifacts: '*.csv', fingerprint: true
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo '✅ Queries ejecutadas exitosamente'
+        }
+        failure {
+            echo '❌ Error al ejecutar queries'
+        }
+    }
+}
+

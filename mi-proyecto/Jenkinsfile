@@ -1,29 +1,5 @@
-// Pipeline usando funciones reutilizables definidas en el mismo Jenkinsfile
-// Ya que la Shared Library tiene problemas de configuración, usamos funciones locales
-
-// Función para build Maven
-def buildMaven(String projectPath) {
-    echo "🔨 Construyendo proyecto Maven en: ${projectPath}"
-    dir(projectPath) {
-        sh 'mvn clean install'
-    }
-    echo "✅ Build completado exitosamente"
-}
-
-// Función para test Maven
-def testMaven(String projectPath) {
-    echo "🧪 Ejecutando tests Maven en: ${projectPath}"
-    dir(projectPath) {
-        sh 'mvn test'
-    }
-    echo "✅ Tests completados"
-}
-
-// Función para notificaciones
-def notifySlack(String message, String status) {
-    def emoji = status == 'SUCCESS' ? '✅' : '❌'
-    echo "${emoji} ${status}: ${message}"
-}
+// Cargar la Shared Library desde la raíz del repositorio
+@Library('jenkins-shared-library@develop') _
 
 pipeline {
     agent any 
@@ -31,25 +7,26 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                script {
-                    buildMaven('mi-proyecto')
-                }
+                // Usando buildMaven de vars/buildMaven.groovy
+                buildMaven('mi-proyecto')
             }
         }
         
         stage('Test') {
             steps {
-                script {
-                    testMaven('mi-proyecto')
-                }
+                // Usando testMaven de vars/testMaven.groovy
+                testMaven('mi-proyecto')
             }
         }
         
         stage('Deploy') {
             steps {
-                echo '🚀 Desplegando mi-proyecto en development'
-                echo 'Simulando despliegue en el servidor de producción'
-                echo '✅ Despliegue completado'
+                // Usando deployApp de vars/deployApp.groovy
+                deployApp(
+                    appName: 'mi-proyecto',
+                    environment: 'development',
+                    deployCommand: 'echo "Simulando despliegue en el servidor de producción"'
+                )
             }
         }
     }
@@ -59,14 +36,12 @@ pipeline {
             echo 'Pipeline finalizado'
         }
         success {
-            script {
-                notifySlack('Build completado exitosamente!', 'SUCCESS')
-            }
+            // Usando notifySlack de vars/notifySlack.groovy
+            notifySlack('Build completado exitosamente!', 'SUCCESS')
         }
         failure {
-            script {
-                notifySlack('Build falló', 'FAILURE')
-            }
+            // Usando notifySlack de vars/notifySlack.groovy
+            notifySlack('Build falló', 'FAILURE')
         }
     }
 }

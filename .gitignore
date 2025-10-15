@@ -13,7 +13,7 @@ __pycache__/
 
 # Reportes de pytest
 reports/
-*.xml
+reports/*.xml
 *.html
 
 # IDEs

@@ -1,0 +1,39 @@
+{
+  "defaults": {
+    "maven": {
+      "jdkVersion": "11",
+      "mavenVersion": "3.8.1",
+      "goals": {
+        "build": "clean install",
+        "test": "test",
+        "compile": "compile"
+      }
+    },
+    "docker": {
+      "registry": "docker.io",
+      "buildArgs": []
+    },
+    "notifications": {
+      "slack": {
+        "enabled": false,
+        "defaultChannel": "#jenkins",
+        "notifyOnSuccess": true,
+        "notifyOnFailure": true
+      },
+      "email": {
+        "enabled": false,
+        "recipients": ["team@example.com"]
+      }
+    },
+    "deployment": {
+      "environments": ["dev", "staging", "production"],
+      "requireApprovalFor": ["production"],
+      "autoDeployBranches": {
+        "dev": "develop",
+        "staging": "release/*",
+        "production": "main"
+      }
+    }
+  }
+}
+

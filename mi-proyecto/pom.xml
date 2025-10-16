@@ -7,6 +7,17 @@
   <version>1.0-SNAPSHOT</version>
   <name>mi-proyecto</name>
   <url>http://maven.apache.org</url>
+  
+  <!-- Configuración para pipeline de Jenkins según rama develop -->
+  <properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    
+    <!-- Controla si develop ejecuta tests unitarios -->
+    <!-- true = compila + ejecuta tests + inserta en BD -->
+    <!-- false = solo compila, sin tests -->
+    <develop.runTests>true</develop.runTests>
+  </properties>
+  
   <dependencies>
     <dependency>
       <groupId>junit</groupId>

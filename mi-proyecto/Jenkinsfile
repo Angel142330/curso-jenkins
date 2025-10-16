@@ -8,9 +8,9 @@ pipeline {
     agent any 
     
     environment {
-        BUILD_VERSION = ''      // Se llenará con Utils
-        BUILD_TIMESTAMP = ''    // Se llenará con Utils
-        IS_RELEASE_BRANCH = ''  // Se llenará con Utils
+        BUILD_VERSION = ''      
+        BUILD_TIMESTAMP = ''
+        IS_RELEASE_BRANCH = ''  
     }
     
     stages {
@@ -23,14 +23,14 @@ pipeline {
                     IS_RELEASE_BRANCH = utils.isReleaseBranch(env.BRANCH_NAME ?: 'develop')
                     
                     echo "════════════════════════════════════════"
-                    echo "📋 INFORMACIÓN DEL BUILD"
+                    echo " INFORMACIÓN DEL BUILD"
                     echo "════════════════════════════════════════"
-                    echo "🏷️  Build Version: ${BUILD_VERSION}"
-                    echo "⏰  Build Timestamp: ${BUILD_TIMESTAMP}"
-                    echo "🌿  Rama: ${env.BRANCH_NAME ?: 'develop'}"
-                    echo "📦  Release Branch: ${IS_RELEASE_BRANCH}"
-                    echo "🔢  Build Number: ${env.BUILD_NUMBER}"
-                    echo "👤  Started by: ${env.BUILD_USER_ID ?: 'Jenkins'}"
+                    echo "  Build Version: ${BUILD_VERSION}"
+                    echo "  Build Timestamp: ${BUILD_TIMESTAMP}"
+                    echo "  Rama: ${env.BRANCH_NAME ?: 'develop'}"
+                    echo "  Release Branch: ${IS_RELEASE_BRANCH}"
+                    echo "  Build Number: ${env.BUILD_NUMBER}"
+                    echo "  Started by: ${env.BUILD_USER_ID ?: 'Jenkins'}"
                     echo "════════════════════════════════════════"
                 }
             }

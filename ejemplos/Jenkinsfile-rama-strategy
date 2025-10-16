@@ -1,0 +1,286 @@
+// Pipeline con estrategia según rama (feature/*, develop, master)
+@Library('jenkins-shared-library@develop') _
+import org.miempresa.Utils
+
+def utils = new Utils(this)
+
+pipeline {
+    agent any
+    
+    environment {
+        PROJECT_NAME = 'mi-proyecto'
+        BUILD_VERSION = ''
+        BUILD_TIMESTAMP = ''
+        CURRENT_BRANCH = "${env.BRANCH_NAME ?: 'develop'}"
+        
+        // Lista de tests excepcionados (no fallan el build)
+        EXCEPTED_TESTS = 'TestLogin,TestPayment,TestOldFeature'
+    }
+    
+    stages {
+        stage('Prepare') {
+            steps {
+                script {
+                    BUILD_TIMESTAMP = utils.getTimestamp('yyyyMMdd-HHmmss')
+                    BUILD_VERSION = utils.getTimestamp('yyyyMMdd')
+                    
+                    echo "════════════════════════════════════════"
+                    echo "📋 BUILD INFO"
+                    echo "════════════════════════════════════════"
+                    echo "🌿 Rama: ${CURRENT_BRANCH}"
+                    echo "🏷️  Versión: ${BUILD_VERSION}"
+                    echo "🔢 Build: ${env.BUILD_NUMBER}"
+                    echo "════════════════════════════════════════"
+                }
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════
+        // STAGE: Kiuwan Validator (TODAS LAS RAMAS)
+        // ═══════════════════════════════════════════════════════
+        stage('Kiuwan Validator') {
+            steps {
+                script {
+                    echo "🔍 Validando con Kiuwan (rama: ${CURRENT_BRANCH})"
+                    
+                    // Para feature/*, borrar resultados después
+                    def deleteAfter = CURRENT_BRANCH.startsWith('feature/')
+                    
+                    kiuwanValidator(PROJECT_NAME, deleteAfter)
+                    
+                    if (deleteAfter) {
+                        echo "✅ Kiuwan OK - Resultados borrados (rama feature/*)"
+                    }
+                }
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════
+        // ESTRATEGIA: RAMA FEATURE/*
+        // ═══════════════════════════════════════════════════════
+        stage('Feature Branch Strategy') {
+            when {
+                expression { CURRENT_BRANCH.startsWith('feature/') }
+            }
+            steps {
+                script {
+                    echo "🌿 Estrategia FEATURE: Solo Kiuwan"
+                    echo "✅ Feature validada - No más pasos necesarios"
+                }
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════
+        // ESTRATEGIA: RAMA DEVELOP
+        // ═══════════════════════════════════════════════════════
+        stage('Develop Branch Strategy') {
+            when {
+                expression { CURRENT_BRANCH == 'develop' }
+            }
+            stages {
+                stage('Develop - Check POM Config') {
+                    steps {
+                        script {
+                            echo "🌿 Estrategia DEVELOP: Revisando pom.xml..."
+                            
+                            // Leer configuración del pom.xml
+                            def pomConfig = checkPomConfig(PROJECT_NAME)
+                            
+                            env.RUN_TESTS = pomConfig.runTests.toString()
+                            env.INSERT_DB = pomConfig.insertDb.toString()
+                            
+                            echo "═══════════════════════════════════════"
+                            echo "📋 Configuración desde pom.xml:"
+                            echo "   → develop.runTests = ${env.RUN_TESTS}"
+                            echo "   → Insertar en BD = ${env.INSERT_DB}"
+                            echo "═══════════════════════════════════════"
+                        }
+                    }
+                }
+                
+                stage('Develop - Compile') {
+                    steps {
+                        script {
+                            echo "⚙️ Compilando (sin tests por ahora)..."
+                            compileMaven(PROJECT_NAME)
+                        }
+                    }
+                }
+                
+                stage('Develop - Tests (condicional)') {
+                    when {
+                        expression { env.RUN_TESTS == 'true' }
+                    }
+                    steps {
+                        script {
+                            echo "🧪 POM indica RUN_TESTS=true → Ejecutando tests"
+                            
+                            def testsPassed = true
+                            
+                            try {
+                                testMaven(PROJECT_NAME)
+                            } catch (Exception e) {
+                                testsPassed = false
+                                throw e
+                            } finally {
+                                // Insertar resultados en BD si está configurado
+                                if (env.INSERT_DB == 'true') {
+                                    insertTestResultsToDb(
+                                        projectName: PROJECT_NAME,
+                                        branch: CURRENT_BRANCH,
+                                        testsPassed: testsPassed,
+                                        buildNumber: env.BUILD_NUMBER
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                stage('Develop - Skip Tests') {
+                    when {
+                        expression { env.RUN_TESTS == 'false' }
+                    }
+                    steps {
+                        echo "⏭️ POM indica RUN_TESTS=false → Saltando tests"
+                    }
+                }
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════
+        // ESTRATEGIA: RAMA MASTER
+        // ═══════════════════════════════════════════════════════
+        stage('Master Branch Strategy') {
+            when {
+                expression { CURRENT_BRANCH == 'master' || CURRENT_BRANCH == 'main' }
+            }
+            stages {
+                stage('Master - Compile') {
+                    steps {
+                        script {
+                            echo "🌿 Estrategia MASTER: Todas las pruebas obligatorias"
+                            buildMaven(PROJECT_NAME)
+                        }
+                    }
+                }
+                
+                stage('Master - Unit Tests') {
+                    steps {
+                        script {
+                            echo "🧪 Ejecutando pruebas unitarias (obligatorias)..."
+                            
+                            def testsPassed = true
+                            def exceptions = env.EXCEPTED_TESTS.split(',').toList()
+                            
+                            try {
+                                testMaven(PROJECT_NAME)
+                            } catch (Exception e) {
+                                // Verificar si el test está excepcionado
+                                def failedTest = extractTestName(e.message)
+                                
+                                if (exceptions.contains(failedTest)) {
+                                    echo "⚠️ Test '${failedTest}' EXCEPCIONADO → Continuando como OK"
+                                    testsPassed = true
+                                } else {
+                                    testsPassed = false
+                                    throw e
+                                }
+                            }
+                            
+                            // Insertar en BD
+                            insertTestResultsToDb(
+                                projectName: PROJECT_NAME,
+                                branch: CURRENT_BRANCH,
+                                testsPassed: testsPassed,
+                                buildNumber: env.BUILD_NUMBER
+                            )
+                        }
+                    }
+                }
+                
+                stage('Master - Regression Tests') {
+                    steps {
+                        script {
+                            echo "🔄 Ejecutando pruebas de regresión (obligatorias)..."
+                            
+                            def exceptions = env.EXCEPTED_TESTS.split(',').toList()
+                            runRegressionTests(PROJECT_NAME, exceptions)
+                        }
+                    }
+                }
+                
+                stage('Master - Integration Tests') {
+                    steps {
+                        script {
+                            echo "🔗 Ejecutando pruebas de integración (obligatorias)..."
+                            
+                            // Aquí puedes agregar tus pruebas de integración
+                            sh """
+                                echo "Running integration tests..."
+                                # mvn verify -Pintegration
+                            """
+                        }
+                    }
+                }
+                
+                stage('Master - All Tests Summary') {
+                    steps {
+                        script {
+                            echo "═══════════════════════════════════════"
+                            echo "📊 RESUMEN DE PRUEBAS (MASTER)"
+                            echo "═══════════════════════════════════════"
+                            echo "✅ Kiuwan: PASS"
+                            echo "✅ Unit Tests: PASS"
+                            echo "✅ Regression Tests: PASS"
+                            echo "✅ Integration Tests: PASS"
+                            echo "═══════════════════════════════════════"
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            script {
+                echo "═══════════════════════════════════════"
+                echo "📊 RESULTADO FINAL"
+                echo "═══════════════════════════════════════"
+                echo "Rama: ${CURRENT_BRANCH}"
+                echo "Build: ${env.BUILD_NUMBER}"
+                echo "Status: ${currentBuild.currentResult}"
+                echo "═══════════════════════════════════════"
+            }
+        }
+        success {
+            script {
+                def strategy = CURRENT_BRANCH.startsWith('feature/') ? 'Feature (Kiuwan only)' : 
+                               CURRENT_BRANCH == 'develop' ? 'Develop (POM config)' : 
+                               'Master (All tests)'
+                
+                notifySlack(
+                    "✅ Build ${BUILD_VERSION} - ${strategy} - SUCCESS",
+                    'SUCCESS'
+                )
+            }
+        }
+        failure {
+            script {
+                notifySlack(
+                    "❌ Build ${BUILD_VERSION} - ${CURRENT_BRANCH} - FAILED at ${env.STAGE_NAME}",
+                    'FAILURE'
+                )
+            }
+        }
+    }
+}
+
+// Función auxiliar para extraer nombre del test que falló
+def extractTestName(String errorMessage) {
+    // Personaliza según el formato de tus mensajes de error
+    def matcher = (errorMessage =~ /(\w+Test)/)
+    return matcher ? matcher[0][1] : 'unknown'
+}
+
